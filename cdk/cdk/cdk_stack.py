@@ -15,23 +15,24 @@ from aws_cdk.aws_iam import (
     Policy,
     ManagedPolicy,
     ServicePrincipal,
+    ArnPrincipal,
     CfnInstanceProfile,
     Effect,
     PolicyStatement,
 )
 
+
 class CdkStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
-
-        #创建访问角色
+        # 创建lambda访问角色
         #  action -> statement -> policy -> role -> attach lambda
         actions = ["logs:CreateLogGroup",
                    "logs:CreateLogStream",
                    "logs:PutLogEvents",
-                   "s3:GetObject",
-                   "s3:PutObject"]
+                   "sts:AssumeRole"
+                   ]
 
         policyStatement = PolicyStatement(actions=actions, effect=Effect.ALLOW)
         policyStatement.add_all_resources()
@@ -50,6 +51,35 @@ class CdkStack(core.Stack):
 
         lambda_policy.attach_to_role(access_role)
 
+        # 创建S3 put的角色
+        #  action -> statement -> policy -> role
+        s3_actions = ["logs:CreateLogGroup",
+                      "logs:CreateLogStream",
+                      "logs:PutLogEvents",
+                      "s3:PutObject",
+                      "s3:GetObject",
+                      "s3:ListBucket",
+                      "s3:PutObjectTagging",
+                      "s3:DeleteObject",
+                      "s3:PutObjectAcl",
+                      ]
+        s3_policyStatement = PolicyStatement(actions=s3_actions, effect=Effect.ALLOW)
+        s3_policyStatement.add_all_resources()
+
+        s3_policy_name = "{}-policy-s3".format(Constant.PROJECT_NAME)
+        s3_lambda_policy = Policy(self, s3_policy_name, policy_name=s3_policy_name)
+
+        s3_lambda_policy.add_statements(s3_policyStatement)
+
+        s3_role_name = "{}-role-s3".format(Constant.PROJECT_NAME)
+        s3_access_role = Role(
+            self, s3_role_name,
+            role_name=s3_role_name,
+            assumed_by=ArnPrincipal(access_role.role_arn)
+        )
+
+        s3_lambda_policy.attach_to_role(s3_access_role)
+
         # 创建STS lambda
         sts_lambda = _lambda.Function(
             self, 'sts', function_name='sts',
@@ -59,8 +89,7 @@ class CdkStack(core.Stack):
             timeout=Duration.minutes(1),
             role=access_role,
         )
-        sts_lambda.add_environment("ak", Constant.AK)
-        sts_lambda.add_environment("sk", Constant.SK)
+        sts_lambda.add_environment("role_to_assume_arn", s3_access_role.role_arn)
 
         base_api = apigw.RestApi(
             self, 'Endpoint',
@@ -75,7 +104,7 @@ class CdkStack(core.Stack):
                 }
             }
         ]
-                                                                     )
+                                                                    )
         example_entity.add_method('GET', example_entity_lambda_integration,
                                   method_responses=[{
                                       'statusCode': '200',
@@ -88,9 +117,7 @@ class CdkStack(core.Stack):
 
         self.add_cors_options(example_entity)
 
-
-
-        #创建缩略图lambda
+        # 创建缩略图lambda
         layer_cv2 = _lambda.LayerVersion(
             self, 'cv2',
             code=_lambda.Code.from_bucket(s3.Bucket.from_bucket_name(self, "cdk-data-layer", bucket_name='nowfox'),
@@ -99,7 +126,7 @@ class CdkStack(core.Stack):
         )
 
         lambda_thum = _lambda.Function(
-            self, 'thum',function_name='thum',
+            self, 'thum', function_name='thum',
             runtime=_lambda.Runtime.PYTHON_3_7,
             code=_lambda.Code.asset('lambda'),
             handler='thum.handler',
@@ -112,15 +139,16 @@ class CdkStack(core.Stack):
         # 创建存储上传图片的bucket
         s3_bucket_name = "{}-{}".format("upload", self._get_UUID(4))
         s3_upload = s3.Bucket(self, id=s3_bucket_name, bucket_name=s3_bucket_name,
-                  #access_control=s3.BucketAccessControl.PUBLIC_READ,#不建议使用这个，这个会有list权限，下面这个没有list权限
-                  public_read_access=True,
-                  removal_policy=core.RemovalPolicy.DESTROY,  # TODO:  destroy for test
-                  # removal_policy=core.RemovalPolicy.RETAIN
-                  )
+                              # access_control=s3.BucketAccessControl.PUBLIC_READ,#不建议使用这个，这个会有list权限，下面这个没有list权限
+                              public_read_access=True,
+                              removal_policy=core.RemovalPolicy.DESTROY,  # TODO:  destroy for test
+                              # removal_policy=core.RemovalPolicy.RETAIN
+                              )
         notification = aws_s3_notifications.LambdaDestination(lambda_thum)
         s3_filter = s3.NotificationKeyFilter(suffix=".mp4")
-        s3_upload.add_event_notification(s3.EventType.OBJECT_CREATED_PUT,notification,s3_filter)
-        s3_upload.add_cors_rule(allowed_methods=[HttpMethods.POST,HttpMethods.PUT],allowed_origins =["*"],allowed_headers=["*"])
+        s3_upload.add_event_notification(s3.EventType.OBJECT_CREATED_PUT, notification, s3_filter)
+        s3_upload.add_cors_rule(allowed_methods=[HttpMethods.POST, HttpMethods.PUT], allowed_origins=["*"],
+                                allowed_headers=["*"])
 
         '''
         #创建上传lambda
@@ -137,8 +165,8 @@ class CdkStack(core.Stack):
         lambda_upload.add_environment("bucket", s3_bucket_name)
         lambda_upload.add_environment("region", "cn-northwest-1")
         '''
-        core.CfnOutput(self,"authUrl",value=base_api.url+"auth",description="authUrl")
-        core.CfnOutput(self,"S3BucketName",value=s3_bucket_name,description="S3BucketName")
+        core.CfnOutput(self, "authUrl", value=base_api.url + "auth", description="authUrl")
+        core.CfnOutput(self, "S3BucketName", value=s3_bucket_name, description="S3BucketName")
 
         # 创建API Gateway，由于需要HTTP方式，而CDK只支持REST方式，无法使用CDK创建
 
@@ -159,7 +187,7 @@ class CdkStack(core.Stack):
             ],
             passthrough_behavior=apigw.PassthroughBehavior.WHEN_NO_MATCH,
             request_templates={"application/json": "{\"statusCode\":200}"}
-            ),
+        ),
                                   method_responses=[{
                                       'statusCode': '200',
                                       'responseParameters': {

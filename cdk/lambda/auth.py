@@ -2,17 +2,19 @@ import json
 import boto3
 import os
 
-ak = os.environ['ak']
-sk = os.environ['sk']
+role_to_assume_arn = os.environ['role_to_assume_arn']
 
 def handler(event, context):
-    sts = boto3.client('sts',
-                       aws_access_key_id=ak,
-                       aws_secret_access_key=sk)
-    credentials = sts.get_session_token()
-    credentials["Credentials"]["Expiration"] = ""
+    sts = boto3.client('sts')
+    response = sts.assume_role(
+        RoleArn=role_to_assume_arn,
+        RoleSessionName='test_session'
+    )
 
-    print('request: {}'.format(json.dumps(event)))
+    credentials = response['Credentials']
+    credentials["Expiration"] = ""
+
+    # print('request: {}'.format(json.dumps(event)))
     return {
         'statusCode': 200,
         'headers': {
