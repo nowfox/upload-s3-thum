@@ -6,6 +6,6 @@ from cdk.cdk_stack import CdkStack
 
 
 app = core.App()
-CdkStack(app, "cdk")
+CdkStack(app, "thum-cdk")
 
 app.synth()

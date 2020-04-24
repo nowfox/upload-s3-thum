@@ -26,7 +26,7 @@ class CdkStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
-        # 创建lambda访问角色
+        # 创建sts lambda访问角色
         #  action -> statement -> policy -> role -> attach lambda
         actions = ["logs:CreateLogGroup",
                    "logs:CreateLogStream",
@@ -38,9 +38,9 @@ class CdkStack(core.Stack):
         policyStatement.add_all_resources()
 
         policy_name = "{}-policy".format(Constant.PROJECT_NAME)
-        lambda_policy = Policy(self, policy_name, policy_name=policy_name)
+        sts_policy = Policy(self, policy_name, policy_name=policy_name)
 
-        lambda_policy.add_statements(policyStatement)
+        sts_policy.add_statements(policyStatement)
 
         role_name = "{}-role".format(Constant.PROJECT_NAME)
         access_role = Role(
@@ -49,27 +49,48 @@ class CdkStack(core.Stack):
             assumed_by=ServicePrincipal('lambda.amazonaws.com')
         )
 
-        lambda_policy.attach_to_role(access_role)
+        sts_policy.attach_to_role(access_role)
+
+        # 创建thum lambda访问角色
+        #  action -> statement -> policy -> role
+        thum_actions = ["logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "s3:PutObject"
+                       ]
+
+        thum_policyStatement = PolicyStatement(actions=thum_actions, effect=Effect.ALLOW)
+        thum_policyStatement.add_all_resources()
+
+        thum_policy_name = "{}-policy-thum".format(Constant.PROJECT_NAME)
+        thum_policy = Policy(self, thum_policy_name, policy_name=thum_policy_name)
+
+        thum_policy.add_statements(thum_policyStatement)
+
+        thum_role_name = "{}-role-thum".format(Constant.PROJECT_NAME)
+        thum_access_role = Role(
+            self, thum_role_name,
+            role_name=thum_role_name,
+            assumed_by=ServicePrincipal('lambda.amazonaws.com')
+        )
+
+        thum_policy.attach_to_role(thum_access_role)
 
         # 创建S3 put的角色
         #  action -> statement -> policy -> role
-        s3_actions = ["logs:CreateLogGroup",
-                      "logs:CreateLogStream",
-                      "logs:PutLogEvents",
-                      "s3:PutObject",
+        s3_actions = ["s3:PutObject",
                       "s3:GetObject",
                       "s3:ListBucket",
                       "s3:PutObjectTagging",
-                      "s3:DeleteObject",
                       "s3:PutObjectAcl",
                       ]
         s3_policyStatement = PolicyStatement(actions=s3_actions, effect=Effect.ALLOW)
         s3_policyStatement.add_all_resources()
 
         s3_policy_name = "{}-policy-s3".format(Constant.PROJECT_NAME)
-        s3_lambda_policy = Policy(self, s3_policy_name, policy_name=s3_policy_name)
+        s3_policy = Policy(self, s3_policy_name, policy_name=s3_policy_name)
 
-        s3_lambda_policy.add_statements(s3_policyStatement)
+        s3_policy.add_statements(s3_policyStatement)
 
         s3_role_name = "{}-role-s3".format(Constant.PROJECT_NAME)
         s3_access_role = Role(
@@ -78,7 +99,7 @@ class CdkStack(core.Stack):
             assumed_by=ArnPrincipal(access_role.role_arn)
         )
 
-        s3_lambda_policy.attach_to_role(s3_access_role)
+        s3_policy.attach_to_role(s3_access_role)
 
         # 创建STS lambda
         sts_lambda = _lambda.Function(
@@ -131,7 +152,7 @@ class CdkStack(core.Stack):
             code=_lambda.Code.asset('lambda'),
             handler='thum.handler',
             timeout=Duration.minutes(1),
-            role=access_role,
+            role=thum_access_role,
         )
         lambda_thum.add_environment("frame_second", "3")
         lambda_thum.add_layers(layer_cv2)
