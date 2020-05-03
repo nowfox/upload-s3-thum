@@ -20,5 +20,5 @@ def handler(event, context):
         'headers': {
             'Content-Type': 'text/plain'
         },
-        'body': json.dumps(credentials)
+        'body': credentials
     }

@@ -1,3 +1,8 @@
+var AUTH_URL="https://9frrktmqie.execute-api.cn-northwest-1.amazonaws.com.cn/prod/auth";
+var bucketName="upload-d5a1";
+
+
+var aws_credentials = {}
 var MAX_TRY_COUNT = 3    // 最大尝试次数
 var INTERVAL_TIME = 3000  //时间间隔
 var current_try_count = 1 //当前尝试次数
@@ -8,16 +13,38 @@ $(function(){
   vue = new Vue({
           el: '#main',
           data:{
-              pageCount:0,
-              thumbnail_image_url:'#'
+              thumbnail_image_url:'#'   // 需要刷新的image 地址
            },methods:{
               upload_video_file:function(){
                   upload_video_file()
               }
            }
   })
-
+    get_credentials()
 });
+
+function get_credentials(){
+
+     $.ajax({
+              async:false,
+              type:"get",
+              url:AUTH_URL,
+              complete: function(response){
+                var body= JSON.parse(response.responseText).body;
+                aws_credentials = {
+                    accessKeyId: body.AccessKeyId,
+                    secretAccessKey: body.SecretAccessKey,
+                    sessionToken: body.SessionToken
+                };  //秘钥形式的登录上传
+                console.log(" aws_credentials:   ", aws_credentials)
+
+              },
+              error:function(response){
+                    //console.log('Error readyState: %d   status: %d ' , response.readyState, response.status)
+              }
+        })
+}
+
 
 function upload_video_file(){
 
@@ -32,15 +59,30 @@ function upload_video_file(){
     //Image 的名称是视频名称加 .jpg
     var image_file_name = file_name + '.jpg'
 
-    // 文件越大 尝试次数越多
-    MAX_TRY_COUNT = MAX_TRY_COUNT + MAX_TRY_COUNT* parseInt(file.size/(1024*1024))
 
 
-    //FIXME: 将URL替换成 视频上传以后生成的缩略图的URL
 
-    //FIXME:  替换实际的图片地址 url = pre_s3_url + image_file_name
-    url = pre_s3_url + 'sheep.png'   //这张图片可以测试成功
-    setTimeout("get_data('"+url+"')", INTERVAL_TIME)
+
+    console.log('aws_credentials    -------- ++++++++++++ ', aws_credentials);
+    AWS.config.update(aws_credentials);
+    AWS.config.region = 'cn-northwest-1';   //设置区域
+    var bucket = new AWS.S3({params: {Bucket: bucketName}});  //选择桶
+    var params = {Key: "upload/"+file_name,
+                        ContentType: file.type,
+                        Body: file, 'Access-Control-Allow-Credentials': '*','ACL': 'public-read'}; //key可以设置为桶的相对路径，Body为文件， ACL最好要设置
+    bucket.upload(params, function (err, data) {
+
+        console.log('ERROR ---------------:   ', err);  //打印出错误
+        console.log('data ---------------:   ', data);  //打印出错误
+        if (err ==0 ){
+            //FIXME: 将URL替换成 视频上传以后生成的缩略图的URL
+            url = pre_s3_url + image_file_name
+            setTimeout("get_data('"+url+"')", INTERVAL_TIME)
+        }
+
+    });
+
+
 
 }
 
