@@ -168,7 +168,7 @@ class CdkStack(core.Stack):
         notification = aws_s3_notifications.LambdaDestination(lambda_thum)
         s3_filter = s3.NotificationKeyFilter(suffix=".mp4")
         s3_upload.add_event_notification(s3.EventType.OBJECT_CREATED_PUT, notification, s3_filter)
-        s3_upload.add_cors_rule(allowed_methods=[HttpMethods.POST, HttpMethods.PUT], allowed_origins=["*"],
+        s3_upload.add_cors_rule(allowed_methods=[HttpMethods.POST, HttpMethods.PUT, HttpMethods.GET], allowed_origins=["*"],
                                 allowed_headers=["*"])
 
         '''

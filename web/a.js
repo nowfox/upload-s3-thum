@@ -1,12 +1,13 @@
-var AUTH_URL="https://9frrktmqie.execute-api.cn-northwest-1.amazonaws.com.cn/prod/auth";
-var bucketName="upload-d5a1";
+var AUTH_URL="https://49eqeh4ac6.execute-api.cn-northwest-1.amazonaws.com.cn/prod/auth";
+var bucketName="upload-1b4c";
+var region="cn-northwest-1";
+var path="upload/";
 
 
 var aws_credentials = {}
 var MAX_TRY_COUNT = 3    // 最大尝试次数
 var INTERVAL_TIME = 3000  //时间间隔
 var current_try_count = 1 //当前尝试次数
-var pre_s3_url = 'https://dikers-html.s3.cn-northwest-1.amazonaws.com.cn/'
 var vue ;
 $(function(){
 
@@ -57,7 +58,7 @@ function upload_video_file(){
     var file = fileChooser.files[0];
     file_name = file.name.replaceAll(' ', '_')
     //Image 的名称是视频名称加 .jpg
-    var image_file_name = file_name + '.jpg'
+    var image_file_name = file_name.replaceAll(".mp4","nail.jpg")
 
 
 
@@ -65,19 +66,20 @@ function upload_video_file(){
 
     console.log('aws_credentials    -------- ++++++++++++ ', aws_credentials);
     AWS.config.update(aws_credentials);
-    AWS.config.region = 'cn-northwest-1';   //设置区域
+    AWS.config.region = region;   //设置区域
     var bucket = new AWS.S3({params: {Bucket: bucketName}});  //选择桶
-    var params = {Key: "upload/"+file_name,
+    var params = {Key: path+file_name,
                         ContentType: file.type,
                         Body: file, 'Access-Control-Allow-Credentials': '*','ACL': 'public-read'}; //key可以设置为桶的相对路径，Body为文件， ACL最好要设置
     bucket.upload(params, function (err, data) {
 
         console.log('ERROR ---------------:   ', err);  //打印出错误
         console.log('data ---------------:   ', data);  //打印出错误
-        if (err ==0 ){
+        if (!err){
             //FIXME: 将URL替换成 视频上传以后生成的缩略图的URL
-            url = pre_s3_url + image_file_name
-            setTimeout("get_data('"+url+"')", INTERVAL_TIME)
+            url = "https://"+bucketName+".s3."+region+".amazonaws.com.cn/"+path+"testnail.jpg";
+            console.log("URL:"+url);
+			setTimeout("get_data('"+url+"')", INTERVAL_TIME)
         }
 
     });
@@ -93,14 +95,14 @@ function get_data(url){
     $.ajax({
           async:true,
           type:"get",
-          contentType : "application/json;charset=UTF-8", //类型必填
           url:url,
-          complete: function(response){
+          complete: function(response,textStatus){
             if(response.readyState == '4' && response.status == 200){
                 console.log('--------------------- 图片存在')
                 vue.thumbnail_image_url = url
 
             }else {
+				console.log("response.readyState:"+response.readyState+",response.status="+response.status)
                 console.log('--------------------- 图片不存在')
                 repeat_update_image( url)
             }
